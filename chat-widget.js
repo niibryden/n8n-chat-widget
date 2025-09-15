@@ -1,14 +1,10 @@
 // BusyAccess Chat Widget (clean JS — no inline CSS)
 (function () {
-  /* =========================
-     0) BusyAccess hardening
-     ========================= */
+  // 0) Hardening
   var ALLOWED_ORIGINS = [
     'https://busyaccess.com',
     'https://www.busyaccess.com',
-    // add local/staging while testing; remove before prod if you want it tight
-    'http://localhost:8080',
-    'http://127.0.0.1:8080'
+    'http://localhost:8080', 'http://127.0.0.1:8080' // dev; remove later if you want
   ];
   if (ALLOWED_ORIGINS.indexOf(location.origin) === -1) {
     console.warn('[BusyAccess widget] blocked on origin:', location.origin);
@@ -17,21 +13,15 @@
   if (window.N8NChatWidgetInitialized) return;
   window.N8NChatWidgetInitialized = true;
 
-  /* =========================
-     1) Ensure CSS & font are loaded (no CSS-in-JS)
-     ========================= */
-  // If your page already links the CSS, this does nothing.
+  // 1) Ensure CSS + font via <link>
   (function ensureAssets() {
-    var cssAlready = document.querySelector('link[rel="stylesheet"][href*="chat-widget.css"]');
-    if (!cssAlready) {
+    if (!document.querySelector('link[rel="stylesheet"][href*="chat-widget.css"]')) {
       var cssLink = document.createElement('link');
       cssLink.rel = 'stylesheet';
-      // If you keep chat-script.html at repo root and CSS in assets/, this works:
       cssLink.href = (window.ChatWidgetCssHref || './assets/chat-widget.css');
       document.head.appendChild(cssLink);
     }
-    var fontAlready = document.querySelector('link[rel="stylesheet"][href*="geist-sans"]');
-    if (!fontAlready) {
+    if (!document.querySelector('link[rel="stylesheet"][href*="geist-sans"]')) {
       var fontLink = document.createElement('link');
       fontLink.rel = 'stylesheet';
       fontLink.href = 'https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/style.css';
@@ -39,14 +29,9 @@
     }
   })();
 
-  /* =========================
-     2) BusyAccess defaults
-     ========================= */
+  // 2) Defaults
   var defaultConfig = {
-    webhook: {
-      url: 'https://n8n.srv964829.hstgr.cloud/webhook/f406671e-c954-4691-b39a-66c90aa2f103/chat',
-      route: 'general'
-    },
+    webhook: { url: 'https://n8n.srv964829.hstgr.cloud/webhook/f406671e-c954-4691-b39a-66c90aa2f103/chat', route: 'general' },
     branding: {
       logo: '/assets/logo-busyaccess.svg',
       name: 'BusyAccess',
@@ -54,26 +39,16 @@
       responseTimeText: 'We typically respond right away',
       poweredBy: { text: 'BusyAccess', link: 'https://busyaccess.com' }
     },
-    style: {
-      primaryColor: '#0a5a9f',
-      secondaryColor: '#083d68',
-      position: 'right',
-      backgroundColor: '#ffffff',
-      fontColor: '#1b1b1b'
-    }
+    style: { primaryColor: '#0a5a9f', secondaryColor: '#083d68', position: 'right', backgroundColor: '#ffffff', fontColor: '#1b1b1b' }
   };
-
   var config = window.ChatWidgetConfig ? {
     webhook: Object.assign({}, defaultConfig.webhook, window.ChatWidgetConfig.webhook || {}),
     branding: Object.assign({}, defaultConfig.branding, window.ChatWidgetConfig.branding || {}),
     style: Object.assign({}, defaultConfig.style, window.ChatWidgetConfig.style || {})
   } : defaultConfig;
 
-  /* =========================
-     3) DOM build
-     ========================= */
+  // 3) DOM build
   var currentSessionId = '';
-
   var widgetContainer = document.createElement('div');
   widgetContainer.className = 'n8n-chat-widget';
   widgetContainer.style.setProperty('--n8n-chat-primary-color', config.style.primaryColor);
@@ -130,139 +105,68 @@
 
   var newChatBtn, chatInterface, messagesContainer, textarea, sendButton;
 
-  /* =========================
-     4) Helpers & transport
-     ========================= */
-  function generateUUID() {
+  // 4) Helpers
+  function uuid() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-      var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){var r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16);});
   }
-
   function postJSON(payload) {
     return fetch(config.webhook.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).then(function (res) {
-      return res.text().then(function (text) {
-        if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText + ' – ' + text.slice(0, 200));
-        try { return JSON.parse(text); } catch (_) { return { output: text }; }
-      });
-    });
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    }).then(function(res){ return res.text().then(function(t){ if(!res.ok) throw new Error('HTTP '+res.status+' '+res.statusText+' – '+t.slice(0,200)); try{return JSON.parse(t);}catch(_){return {output:t};} }); });
   }
-
-  function extractOutput(resp) {
-    if (resp == null) return '';
-    if (Array.isArray(resp)) resp = resp[0] || {};
-    if (typeof resp === 'string') return resp;
-    var keys = ['output', 'answer', 'message', 'text'];
-    for (var i = 0; i < keys.length; i++) { if (resp && resp[keys[i]]) return String(resp[keys[i]]); }
-    return typeof resp === 'object' ? JSON.stringify(resp) : String(resp);
+  function out(resp){
+    if (resp==null) return ''; if (Array.isArray(resp)) resp = resp[0]||{};
+    if (typeof resp==='string') return resp;
+    var k=['output','answer','message','text']; for (var i=0;i<k.length;i++){ if (resp&&resp[k[i]]) return String(resp[k[i]]); }
+    return typeof resp==='object'? JSON.stringify(resp): String(resp);
   }
+  function appendBot(text){ var d=document.createElement('div'); d.className='chat-message bot'; d.textContent=text; messages.appendChild(d); messages.scrollTop=messages.scrollHeight; }
 
-  function appendBotMessage(text) {
-    var bot = document.createElement('div');
-    bot.className = 'chat-message bot';
-    bot.textContent = text;
-    messagesContainer.appendChild(bot);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  }
-
-  /* =========================
-     5) Chat actions
-     ========================= */
-  function startNewConversation() {
-    currentSessionId = generateUUID();
-    var payload = {
-      action: 'loadPreviousSession',
-      sessionId: currentSessionId,
-      route: config.webhook.route,
-      metadata: { userId: '' }
-    };
-    postJSON(payload).then(function (responseData) {
-      chatContainer.querySelector('.brand-header').style.display = 'none';
-      chatContainer.querySelector('.new-conversation').style.display = 'none';
+  // 5) Actions
+  function startNewConversation(){
+    currentSessionId = uuid();
+    var payload = { action:'loadPreviousSession', sessionId: currentSessionId, route: config.webhook.route, metadata:{userId:''} };
+    postJSON(payload).then(function(resp){
+      chatContainer.querySelector('.brand-header').style.display='none';
+      chatContainer.querySelector('.new-conversation').style.display='none';
       chatInterface.classList.add('active');
-      appendBotMessage(extractOutput(responseData));
-    }).catch(function (err) {
-      console.error('Error starting conversation:', err);
+      appendBot(out(resp));
+    }).catch(function(e){
+      console.error('Error starting conversation:', e);
       chatInterface.classList.add('active');
-      appendBotMessage('Sorry—couldn’t start the conversation. Try again in a moment.');
+      appendBot('Sorry—couldn’t start the conversation. Try again in a moment.');
     });
   }
-
-  function sendMessage(message) {
-    if (!currentSessionId) currentSessionId = generateUUID();
-    var messageData = {
-      action: 'sendMessage',
-      sessionId: currentSessionId,
-      route: config.webhook.route,
-      chatInput: message,
-      metadata: { userId: '' }
-    };
-    var user = document.createElement('div');
-    user.className = 'chat-message user';
-    user.textContent = message;
-    messagesContainer.appendChild(user);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-    postJSON(messageData).then(function (data) {
-      appendBotMessage(extractOutput(data));
-    }).catch(function (err) {
-      console.error('Error sending message:', err);
-      appendBotMessage('Hmm, that didn’t go through. Check your connection and try again.');
-    });
+  function sendMessage(msg){
+    if (!currentSessionId) currentSessionId = uuid();
+    var payload = { action:'sendMessage', sessionId: currentSessionId, route: config.webhook.route, chatInput: msg, metadata:{userId:''} };
+    var u=document.createElement('div'); u.className='chat-message user'; u.textContent=msg; messages.appendChild(u); messages.scrollTop=messages.scrollHeight;
+    postJSON(payload).then(function(r){ appendBot(out(r)); }).catch(function(e){ console.error('Error sending message:', e); appendBot('Hmm, that didn’t go through. Check your connection and try again.'); });
   }
 
-  /* =========================
-     6) Wiring + safe mount
-     ========================= */
-  function mount() {
-    // (Font & CSS already appended in ensureAssets)
-
+  // 6) Wiring + mount
+  var messages;
+  function mount(){
     widgetContainer.appendChild(chatContainer);
     widgetContainer.appendChild(toggleButton);
     document.body.appendChild(widgetContainer);
 
     newChatBtn = chatContainer.querySelector('.new-chat-btn');
     chatInterface = chatContainer.querySelector('.chat-interface');
-    messagesContainer = chatContainer.querySelector('.chat-messages');
+    messages = chatContainer.querySelector('.chat-messages');
     textarea = chatContainer.querySelector('textarea');
     sendButton = chatContainer.querySelector('button[type="submit"]');
 
     newChatBtn.addEventListener('click', startNewConversation);
-    sendButton.addEventListener('click', function () {
-      var message = (textarea.value || '').trim();
-      if (message) { sendMessage(message); textarea.value = ''; }
-    });
-    textarea.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        var message = (textarea.value || '').trim();
-        if (message) { sendMessage(message); textarea.value = ''; }
-      }
-    });
-    toggleButton.addEventListener('click', function () {
-      var open = chatContainer.classList.toggle('open');
-      toggleButton.setAttribute('aria-expanded', String(open));
-    });
-    var closeButtons = chatContainer.querySelectorAll('.close-button');
-    Array.prototype.forEach.call(closeButtons, function (button) {
-      button.addEventListener('click', function () {
-        chatContainer.classList.remove('open');
-        toggleButton.setAttribute('aria-expanded', 'false');
-      });
+    sendButton.addEventListener('click', function(){ var m=(textarea.value||'').trim(); if(m){ sendMessage(m); textarea.value=''; }});
+    textarea.addEventListener('keydown', function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); var m=(textarea.value||'').trim(); if(m){ sendMessage(m); textarea.value=''; } } });
+    toggleButton.addEventListener('click', function(){ var open=chatContainer.classList.toggle('open'); toggleButton.setAttribute('aria-expanded', String(open)); });
+    Array.prototype.forEach.call(chatContainer.querySelectorAll('.close-button'), function(btn){
+      btn.addEventListener('click', function(){ chatContainer.classList.remove('open'); toggleButton.setAttribute('aria-expanded','false'); });
     });
 
     console.info('BusyAccess Chat Widget v1.0.0 (CSS externalized)');
   }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mount);
-  } else {
-    mount();
-  }
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();
