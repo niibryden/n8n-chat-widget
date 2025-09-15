@@ -1,4 +1,5 @@
-// BusyAccess Chat Widget Script
+<!-- BusyAccess Chat Widget Script -->
+<script>
 (function () {
   /* =========================
      0) BusyAccess hardening
@@ -16,9 +17,9 @@
   window.N8NChatWidgetInitialized = true;
 
   /* =========================
-     1) Styles (unchanged)
+     1) Styles (bulletproof)
      ========================= */
-  const styles = `
+  const styles = String.raw`
     .n8n-chat-widget {
       --chat--color-primary: var(--n8n-chat-primary-color, #0a5a9f);
       --chat--color-secondary: var(--n8n-chat-secondary-color, #083d68);
@@ -138,12 +139,10 @@
   const fontLink = document.createElement('link');
   fontLink.rel = 'stylesheet';
   fontLink.href = 'https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/style.css';
-  document.head.appendChild(fontLink);
 
   // Inject styles
   const styleSheet = document.createElement('style');
   styleSheet.textContent = styles;
-  document.head.appendChild(styleSheet);
 
   /* =========================
      2) BusyAccess defaults
@@ -184,7 +183,7 @@
     : defaultConfig;
 
   /* =========================
-     3) DOM build
+     3) DOM build (deferred until body exists)
      ========================= */
 
   let currentSessionId = '';
@@ -205,7 +204,7 @@
     <div class="brand-header">
       <img src="${config.branding.logo}" alt="${config.branding.name}">
       <span>${config.branding.name}</span>
-      <button class="close-button">×</button>
+      <button class="close-button" aria-label="Close">×</button>
     </div>
     <div class="new-conversation">
       <h2 class="welcome-text">${config.branding.welcomeText}</h2>
@@ -220,11 +219,11 @@
   `;
 
   const chatInterfaceHTML = `
-    <div class="chat-interface">
+    <div class="chat-interface" role="region" aria-label="BusyAccess chat">
       <div class="brand-header">
         <img src="${config.branding.logo}" alt="${config.branding.name}">
         <span>${config.branding.name}</span>
-        <button class="close-button">×</button>
+        <button class="close-button" aria-label="Close">×</button>
       </div>
       <div class="chat-messages"></div>
       <div class="chat-input">
@@ -232,7 +231,7 @@
         <button type="submit">Send</button>
       </div>
       <div class="chat-footer">
-        <a href="${config.branding.poweredBy.link}" target="_blank" rel="noopener">${config.branding.poweredBy.text}</a>
+        <a href="${config.branding.poweredBy.link}" target="_blank" rel="noopener noreferrer">${config.branding.poweredBy.text}</a>
       </div>
     </div>
   `;
@@ -241,38 +240,60 @@
 
   const toggleButton = document.createElement('button');
   toggleButton.className = `chat-toggle${config.style.position === 'left' ? ' position-left' : ''}`;
+  toggleButton.setAttribute('aria-expanded', 'false');
   toggleButton.innerHTML = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
       <path d="M12 2C6.477 2 2 6.477 2 12c0 1.821.487 3.53 1.338 5L2.5 21.5l4.5-.838A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18c-1.476 0-2.886-.313-4.156-.878l-3.156.586.586-3.156A7.962 7.962 0 014 12c0-4.411 3.589-8 8-8s8 3.589 8 8-3.589 8-8 8z"/>
     </svg>`;
 
-  const newChatBtn = chatContainer.querySelector('.new-chat-btn');
-  const chatInterface = chatContainer.querySelector('.chat-interface');
-  const messagesContainer = chatContainer.querySelector('.chat-messages');
-  const textarea = chatContainer.querySelector('textarea');
-  const sendButton = chatContainer.querySelector('button[type="submit"]');
-
-  widgetContainer.appendChild(chatContainer);
-  widgetContainer.appendChild(toggleButton);
-  document.body.appendChild(widgetContainer);
+  // defer element queries until mounted
+  let newChatBtn, chatInterface, messagesContainer, textarea, sendButton;
 
   /* =========================
      4) Helpers & transport
      ========================= */
 
   function generateUUID() {
-    return crypto.randomUUID();
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    // fallback
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random()*16|0, v = c === 'x' ? r : (r&0x3|0x8);
+      return v.toString(16);
+    });
   }
 
-  // Keep JSON transport to match your current backend shape.
-  // (Later, switch to URLSearchParams to avoid CORS preflight if you update the webhook.)
   async function postJSON(payload) {
     const res = await fetch(config.webhook.url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    return res.json();
+
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} ${res.statusText} – ${text.slice(0, 200)}`);
+    }
+
+    try { return JSON.parse(text); }
+    catch { return { output: text }; }
+  }
+
+  function extractOutput(resp) {
+    if (resp == null) return '';
+    if (Array.isArray(resp)) resp = resp[0] ?? {};
+    if (typeof resp === 'string') return resp;
+    for (const k of ['output', 'answer', 'message', 'text']) {
+      if (resp && typeof resp === 'object' && resp[k]) return String(resp[k]);
+    }
+    return typeof resp === 'object' ? JSON.stringify(resp) : String(resp);
+  }
+
+  function appendBotMessage(text) {
+    const bot = document.createElement('div');
+    bot.className = 'chat-message bot';
+    bot.textContent = text;
+    messagesContainer.appendChild(bot);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 
   /* =========================
@@ -282,31 +303,31 @@
   async function startNewConversation() {
     currentSessionId = generateUUID();
 
-    const data = [{
+    const payload = {
       action: 'loadPreviousSession',
       sessionId: currentSessionId,
       route: config.webhook.route,
       metadata: { userId: '' }
-    }];
+    };
 
     try {
-      const responseData = await postJSON(data);
+      const responseData = await postJSON(payload);
 
       chatContainer.querySelector('.brand-header').style.display = 'none';
       chatContainer.querySelector('.new-conversation').style.display = 'none';
       chatInterface.classList.add('active');
 
-      const botMessageDiv = document.createElement('div');
-      botMessageDiv.className = 'chat-message bot';
-      botMessageDiv.textContent = Array.isArray(responseData) ? responseData[0].output : responseData.output;
-      messagesContainer.appendChild(botMessageDiv);
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      appendBotMessage(extractOutput(responseData));
     } catch (error) {
       console.error('Error starting conversation:', error);
+      chatInterface.classList.add('active');
+      appendBotMessage('Sorry—couldn’t start the conversation. Try again in a moment.');
     }
   }
 
   async function sendMessage(message) {
+    if (!currentSessionId) currentSessionId = generateUUID();
+
     const messageData = {
       action: 'sendMessage',
       sessionId: currentSessionId,
@@ -315,59 +336,79 @@
       metadata: { userId: '' }
     };
 
-    const userMessageDiv = document.createElement('div');
-    userMessageDiv.className = 'chat-message user';
-    userMessageDiv.textContent = message;
-    messagesContainer.appendChild(userMessageDiv);
+    const user = document.createElement('div');
+    user.className = 'chat-message user';
+    user.textContent = message;
+    messagesContainer.appendChild(user);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
     try {
       const data = await postJSON(messageData);
-
-      const botMessageDiv = document.createElement('div');
-      botMessageDiv.className = 'chat-message bot';
-      botMessageDiv.textContent = Array.isArray(data) ? data[0].output : data.output;
-      messagesContainer.appendChild(botMessageDiv);
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      appendBotMessage(extractOutput(data));
     } catch (error) {
       console.error('Error sending message:', error);
+      appendBotMessage('Hmm, that didn’t go through. Check your connection and try again.');
     }
   }
 
   /* =========================
-     6) Wiring
+     6) Wiring + safe mount
      ========================= */
-  newChatBtn.addEventListener('click', startNewConversation);
+  function mount() {
+    document.head.appendChild(fontLink);
+    document.head.appendChild(styleSheet);
 
-  sendButton.addEventListener('click', () => {
-    const message = textarea.value.trim();
-    if (message) {
-      sendMessage(message);
-      textarea.value = '';
-    }
-  });
+    widgetContainer.appendChild(chatContainer);
+    widgetContainer.appendChild(toggleButton);
+    document.body.appendChild(widgetContainer);
 
-  textarea.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+    newChatBtn = chatContainer.querySelector('.new-chat-btn');
+    chatInterface = chatContainer.querySelector('.chat-interface');
+    messagesContainer = chatContainer.querySelector('.chat-messages');
+    textarea = chatContainer.querySelector('textarea');
+    sendButton = chatContainer.querySelector('button[type="submit"]');
+
+    newChatBtn.addEventListener('click', startNewConversation);
+
+    sendButton.addEventListener('click', () => {
       const message = textarea.value.trim();
       if (message) {
         sendMessage(message);
         textarea.value = '';
       }
-    }
-  });
-
-  toggleButton.addEventListener('click', () => {
-    chatContainer.classList.toggle('open');
-  });
-
-  const closeButtons = chatContainer.querySelectorAll('.close-button');
-  closeButtons.forEach((button) => {
-    button.addEventListener('click', () => {
-      chatContainer.classList.remove('open');
     });
-  });
 
-  console.info('BusyAccess Chat Widget v1.0.0');
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const message = textarea.value.trim();
+        if (message) {
+          sendMessage(message);
+          textarea.value = '';
+        }
+      }
+    });
+
+    toggleButton.addEventListener('click', () => {
+      const open = chatContainer.classList.toggle('open');
+      toggleButton.setAttribute('aria-expanded', String(open));
+    });
+
+    const closeButtons = chatContainer.querySelectorAll('.close-button');
+    closeButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        chatContainer.classList.remove('open');
+        toggleButton.setAttribute('aria-expanded', 'false');
+      });
+    });
+
+    console.info('BusyAccess Chat Widget v1.0.0 (fixed)');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount);
+  } else {
+    mount();
+  }
 })();
+</script>
