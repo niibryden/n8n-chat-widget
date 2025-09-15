@@ -1,7 +1,25 @@
-<link rel="stylesheet" href="./assets/chat-widget.css" />
-<script>
-  window.ChatWidgetConfig = {
-    webhook: { url: 'https://n8n.srv964829.hstgr.cloud/webhook/f406671e-c954-4691-b39a-66c90aa2f103/chat', route: 'general' }
-  };
-</script>
-<script src="./chat-widget.js" defer></script>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BusyAccess Chat</title>
+  <link rel="stylesheet" href="./assets/chat-widget.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/style.css" />
+</head>
+<body>
+  <script>
+    window.ChatWidgetConfig = {
+      webhook: { url: 'https://n8n.srv964829.hstgr.cloud/webhook/f406671e-c954-4691-b39a-66c90aa2f103/chat', route: 'general' },
+      branding: {
+        logo: '/assets/logo-busyaccess.svg',
+        name: 'BusyAccess',
+        welcomeText: 'Hi — BusyAccess here. How can we help?',
+        responseTimeText: 'We typically respond right away'
+      },
+      style: { primaryColor:'#0a5a9f', secondaryColor:'#083d68', position:'right', backgroundColor:'#ffffff', fontColor:'#1b1b1b' }
+    };
+  </script>
+  <script src="./chat-widget.js" defer></script>
+</body>
+</html>
