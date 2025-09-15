@@ -152,7 +152,7 @@
   const defaultConfig = {
     webhook: {
       // !! SET THIS TO YOUR PRODUCTION WEBHOOK URL
-      url: https://n8n.srv964829.hstgr.cloud/webhook/f406671e-c954-4691-b39a-66c90aa2f103/chat,
+      url: https://'n8n.srv964829.hstgr.cloud/webhook/f406671e-c954-4691-b39a-66c90aa2f103/chat',
       route: 'general'
     },
     branding: {
